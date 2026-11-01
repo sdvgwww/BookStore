@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Админ-панель - BookStore</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; background-color: #f4f4f4; }
+        header { background-color: #333; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .container { padding: 20px; max-width: 1200px; margin: 0 auto; display: flex; gap: 20px; }
+        
+        /* Форма */
+        .form-panel { background: white; padding: 20px; border-radius: 8px; width: 350px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .form-panel input, .form-panel select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .form-panel button { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;}
+        
+        /* Таблица */
+        .table-panel { background: white; padding: 20px; border-radius: 8px; flex-grow: 1; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        .btn-delete { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        .nav-btn { background: #007bff; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>⚙️ Админ-панель</h1>
+    <div>
+        <a href="/catalog" class="nav-btn">Каталог</a>
+        <a href="/orders" class="nav-btn">Заказы</a>
+    </div>
+</header>
+
+<div class="container">
+    <!-- Форма добавления -->
+    <div class="form-panel">
+        <h2>Добавить книгу</h2>
+        <form id="addBookForm">
+            <input type="text" id="title" placeholder="Название" required>
+            <textarea id="description" placeholder="Описание" rows="2"></textarea>
+            <input type="number" id="cost" placeholder="Цена (₽)" step="0.01" min="0" required>
+            <input type="number" id="quantity" placeholder="Количество" min="0" required>
+            <input type="date" id="publish_date" required>
+            
+            <select id="genre_id" required>
+                <option value="">Выберите жанр...</option>
+            </select>
+
+            <label style="display: flex; align-items: center; gap: 5px; margin-bottom: 10px;">
+                <input type="checkbox" id="is_ebook" style="width: auto; margin: 0;"> Электронная книга
+            </label>
+            
+            <label style="font-size: 12px; color: #666;">Обложка (до 2 МБ):</label>
+            <input type="file" id="cover" accept="image/*" style="margin-bottom: 15px;">
+            
+            <button type="submit">Сохранить</button>
+        </form>
+    </div>
+
+    <!-- Таблица книг -->
+    <div class="table-panel">
+        <h2>Список книг</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Название</th>
+                    <th>Жанр</th>
+                    <th>Цена</th>
+                    <th>Кол-во</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="adminTableBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // Загрузка жанров в выпадающий список
+    async function loadGenres() {
+        const res = await fetch('/api/genres');
+        const genres = await res.json();
+        const select = document.getElementById('genre_id');
+        genres.forEach(g => {
+            select.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+        });
+    }
+
+    // Загрузка книг в таблицу
+    async function loadAdminBooks() {
+        const tbody = document.getElementById('adminTableBody');
+        const res = await fetch('/api/books');
+        const books = await res.json();
+        tbody.innerHTML = '';
+        books.forEach(b => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${b.id}</td>
+                    <td>${b.title}</td>
+                    <td>${b.genre}</td>
+                    <td>${b.cost} ₽</td>
+                    <td>${b.quantity}</td>
+                    <td>
+                        <button class="btn-delete" onclick="deleteBook(${b.id})">Удалить</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    // Добавление книги (FormData для отправки картинки)
+    document.getElementById('addBookForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.append('title', document.getElementById('title').value);
+        formData.append('description', document.getElementById('description').value);
+        formData.append('cost', document.getElementById('cost').value);
+        formData.append('quantity', document.getElementById('quantity').value);
+        formData.append('publish_date', document.getElementById('publish_date').value);
+        formData.append('is_ebook', document.getElementById('is_ebook').checked);
+        formData.append('genre_id', document.getElementById('genre_id').value);
+        
+        const coverFile = document.getElementById('cover').files[0];
+        if (coverFile) formData.append('cover', coverFile);
+
+        try {
+            const res = await fetch('/api/books', { method: 'POST', body: formData });
+            const data = await res.json();
+            
+            if (res.ok) {
+                alert('Книга успешно добавлена!');
+                document.getElementById('addBookForm').reset();
+                loadAdminBooks(); // Обновляем таблицу
+            } else {
+                alert('Ошибка: ' + data.detail); // Покажет ошибку валидации
+            }
+        } catch (error) {
+            alert('Ошибка сервера');
+        }
+    });
+
+    // Удаление книги
+    async function deleteBook(id) {
+        if (!confirm('Вы уверены, что хотите удалить эту книгу?')) return;
+        
+        try {
+            const res = await fetch(`/api/books/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            
+            if (res.ok) {
+                alert('Книга удалена');
+                loadAdminBooks();
+            } else {
+                // Здесь сработает защита из ТЗ (если книга есть в заказах)
+                alert('Ошибка: ' + data.detail); 
+            }
+        } catch (error) {
+            alert('Ошибка сервера');
+        }
+    }
+
+    // Инициализация
+    loadGenres();
+    loadAdminBooks();
+</script>
+
+</body>
+</html>

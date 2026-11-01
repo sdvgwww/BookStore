@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Заказы - BookStore</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; background-color: #f4f4f4; }
+        header { background-color: #333; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        h1 { margin: 0; font-size: 24px; }
+        .container { padding: 20px; max-width: 1200px; margin: 0 auto; }
+        
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #333; color: white; }
+        
+        /* Стиль для просроченных заказов */
+        .overdue { background-color: #ff0000 !important; color: white; font-weight: bold; }
+        .overdue select { color: black; }
+        
+        select { padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
+        
+        .nav-btn { background: #007bff; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>📚 BookStore - Реестр заказов</h1>
+    <div>
+        <a href="/catalog" class="nav-btn">Вернуться в каталог</a>
+    </div>
+</header>
+
+<div class="container">
+    <table>
+        <thead>
+            <tr>
+                <th>№ Заказа</th>
+                <th>Дата оформления</th>
+                <th>Дата доставки</th>
+                <th>Клиент</th>
+                <th>Состав заказа</th>
+                <th>Статус</th>
+            </tr>
+        </thead>
+        <tbody id="ordersTableBody">
+            <tr><td colspan="6">Загрузка заказов...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    // Функция для загрузки заказов
+    async function loadOrders() {
+        const tbody = document.getElementById('ordersTableBody');
+        try {
+            const response = await fetch('/api/orders');
+            const orders = await response.json();
+            
+            tbody.innerHTML = '';
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Сбрасываем время для корректного сравнения дат
+
+            orders.forEach(order => {
+                const deliveryDate = new Date(order.delivery_date);
+                deliveryDate.setHours(0, 0, 0, 0);
+                
+                // Логика просрочки: дата прошла И статус не "выполнен"
+                const isOverdue = deliveryDate < today && order.status !== 'выполнен';
+                
+                const rowClass = isOverdue ? 'overdue' : '';
+
+                tbody.innerHTML += `
+                    <tr class="${rowClass}">
+                        <td>${order.id}</td>
+                        <td>${order.order_date}</td>
+                        <td>${order.delivery_date}</td>
+                        <td>${order.customer_name}</td>
+                        <td>${order.items}</td>
+                        <td>
+                            <select onchange="updateStatus(${order.id}, this.value)">
+                                <option value="в обработке" ${order.status === 'в обработке' ? 'selected' : ''}>в обработке</option>
+                                <option value="в пути" ${order.status === 'в пути' ? 'selected' : ''}>в пути</option>
+                                <option value="выполнен" ${order.status === 'выполнен' ? 'selected' : ''}>выполнен</option>
+                                <option value="отменен" ${order.status === 'отменен' ? 'selected' : ''}>отменен</option>
+                            </select>
+                        </td>
+                    </tr>
+                `;
+            });
+        } catch (error) {
+            tbody.innerHTML = '<tr><td colspan="6">Ошибка при загрузке заказов.</td></tr>';
+        }
+    }
+
+    // Функция для обновления статуса
+    async function updateStatus(orderId, newStatus) {
+        try {
+            await fetch(`/api/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            // Перезагружаем таблицу, чтобы обновить цвет (если статус стал "выполнен", цвет уйдет)
+            loadOrders(); 
+        } catch (error) {
+            alert('Ошибка при обновлении статуса');
+        }
+    }
+
+    // Запуск при открытии страницы
+    loadOrders();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход в BookStore</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; margin: 0; }
+        .login-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 300px; }
+        h2 { text-align: center; color: #333; }
+        input { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        .guest-btn { background-color: #6c757d; margin-top: 10px; text-align: center; display: block; text-decoration: none; color: white; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="login-box">
+    <h2>Вход в систему</h2>
+    <form id="loginForm">
+        <input type="text" id="login" placeholder="Логин" required>
+        <input type="password" id="password" placeholder="Пароль" required>
+        <button type="submit">Войти</button>
+    </form>
+    <a href="#" class="guest-btn" onclick="loginAsGuest()">Войти как Гость</a>
+</div>
+
+<script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const login = document.getElementById('login').value;
+        const password = document.getElementById('password').value;
+
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ login: login, password: password })
+        });
+
+                if (response.ok) {
+            // Если вход успешен, перенаправляем на страницу каталога
+            window.location.href = "/catalog"; 
+        }
+    });
+
+    function loginAsGuest() {
+        alert('Вы вошли как Гость. Доступен только просмотр каталога.');
+        // Здесь позже сделаем перенаправление на каталог
+    }
+</script>
+
+</body>
+</html>

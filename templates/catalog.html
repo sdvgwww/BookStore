@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Каталог книг - BookStore</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; background-color: #f4f4f4; }
+        header { background-color: #333; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        h1 { margin: 0; font-size: 24px; }
+        .container { padding: 20px; max-width: 1200px; margin: 0 auto; }
+        
+        /* Панель управления (поиск, фильтры) */
+        .controls { display: flex; gap: 15px; margin-bottom: 20px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex-wrap: wrap; }
+        .controls input, .controls select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .controls input[type="text"] { flex-grow: 1; min-width: 200px; }
+        .controls label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+
+        .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+        .book-card { background: white; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: relative; }
+        .book-cover { width: 100%; height: 200px; object-fit: cover; border-radius: 4px; background-color: #ddd; margin-bottom: 10px; }
+        
+        .book-title { font-weight: bold; font-size: 18px; margin-bottom: 5px; }
+        .new-book .book-title { color: green; }
+        .old-book { background-color: #ffcccc; }
+        .ebook-badge { position: absolute; top: 20px; right: 20px; background: #007bff; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
+        
+        .book-info { font-size: 14px; color: #555; margin-bottom: 5px; }
+        .book-price { font-weight: bold; color: #333; font-size: 16px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>📚 BookStore</h1>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <!-- Кнопки навигации (появятся для авторизованных) -->
+        <a href="/orders" style="color: white; text-decoration: none; border: 1px solid white; padding: 5px 10px; border-radius: 4px;">Заказы</a>
+        <a href="/admin" style="color: white; text-decoration: none; border: 1px solid white; padding: 5px 10px; border-radius: 4px;">Админка</a>
+        <div>Добро пожаловать, <span id="userName">Гость</span>!</div>
+    </div>
+</header>
+
+<div class="container">
+    <!-- ПАНЕЛЬ УПРАВЛЕНИЯ (Скрыта по умолчанию, включится для ролей) -->
+    <div class="controls" id="controlsPanel" style="display: none;">
+        <input type="text" id="searchInput" placeholder="Поиск по названию или описанию...">
+        
+        <select id="genreFilter">
+            <option value="all">Все жанры</option>
+            <!-- Опции добавятся через JS -->
+        </select>
+
+        <select id="sortFilter">
+            <option value="date_desc">Сначала новые</option>
+            <option value="date_asc">Сначала старые</option>
+        </select>
+
+        <label>
+            <input type="checkbox" id="inStockFilter"> Только в наличии
+        </label>
+    </div>
+
+    <div class="book-grid" id="bookGrid">
+        <p>Загрузка каталога...</p>
+    </div>
+</div>
+
+<script>
+    // Глобальный массив для хранения книг, чтобы фильтровать их без повторных запросов к БД
+    let allBooks = [];
+
+    // Имитация получения роли пользователя (в будущем возьмем из сессии/куки)
+    // Пока для теста ставим 'admin'. Поменяйте на 'guest', чтобы проверить скрытие фильтров.
+    const currentUserRole = 'admin'; 
+
+    async function loadBooks() {
+        const grid = document.getElementById('bookGrid');
+        try {
+            const response = await fetch('/api/books');
+            allBooks = await response.json(); // Сохраняем книги в память
+            
+            // Настраиваем панель управления (фильтры)
+            setupFilters(allBooks);
+            
+            // Первичная отрисовка
+            renderBooks(allBooks);
+        } catch (error) {
+            grid.innerHTML = '<p>Ошибка при загрузке книг.</p>';
+            console.error(error);
+        }
+    }
+
+    function setupFilters(books) {
+        // 1. Показываем панель, если пользователь не Гость
+        if (currentUserRole !== 'guest') {
+            document.getElementById('controlsPanel').style.display = 'flex';
+        }
+
+        // 2. Заполняем выпадающий список жанров уникальными значениями
+        const genreSelect = document.getElementById('genreFilter');
+        const genres = [...new Set(books.map(b => b.genre))]; // Берем только уникальные жанры
+        genres.forEach(genre => {
+            const option = document.createElement('option');
+            option.value = genre;
+            option.textContent = genre;
+            genreSelect.appendChild(option);
+        });
+
+        // 3. Вешаем обработчики событий на элементы управления (мгновенная реакция)
+        document.getElementById('searchInput').addEventListener('input', applyFilters);
+        document.getElementById('genreFilter').addEventListener('change', applyFilters);
+        document.getElementById('sortFilter').addEventListener('change', applyFilters);
+        document.getElementById('inStockFilter').addEventListener('change', applyFilters);
+    }
+
+    function applyFilters() {
+        // Получаем значения из полей
+        const searchText = document.getElementById('searchInput').value.toLowerCase();
+        const selectedGenre = document.getElementById('genreFilter').value;
+        const sortType = document.getElementById('sortFilter').value;
+        const onlyInStock = document.getElementById('inStockFilter').checked;
+
+        // Фильтруем массив
+        let filteredBooks = allBooks.filter(book => {
+            // Проверка поиска (по названию и описанию)
+            const matchesSearch = book.title.toLowerCase().includes(searchText) || 
+                                  (book.description && book.description.toLowerCase().includes(searchText));
+            
+            // Проверка жанра
+            const matchesGenre = (selectedGenre === 'all') || (book.genre === selectedGenre);
+            
+            // Проверка наличия
+            const matchesStock = !onlyInStock || (book.quantity > 0);
+
+            return matchesSearch && matchesGenre && matchesStock;
+        });
+
+        // Сортируем
+        filteredBooks.sort((a, b) => {
+            const dateA = new Date(a.publish_date);
+            const dateB = new Date(b.publish_date);
+            if (sortType === 'date_desc') return dateB - dateA; // Сначала новые
+            if (sortType === 'date_asc') return dateA - dateB;  // Сначала старые
+            return 0;
+        });
+
+        // Отрисовываем результат
+        renderBooks(filteredBooks);
+    }
+
+    function renderBooks(books) {
+        const grid = document.getElementById('bookGrid');
+        grid.innerHTML = '';
+        
+        if (books.length === 0) {
+            grid.innerHTML = '<p>Книги не найдены.</p>';
+            return;
+        }
+
+        const today = new Date();
+        
+        books.forEach(book => {
+            const publishDate = new Date(book.publish_date);
+            const diffTime = Math.abs(today - publishDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            const isNew = diffDays < 30;
+            const isOld = diffDays > 730 && book.quantity > 5;
+            
+            let cardClass = 'book-card';
+            if (isNew) cardClass += ' new-book';
+            if (isOld) cardClass += ' old-book';
+
+            const cover = book.cover_path ? book.cover_path : 'https://via.placeholder.com/250x200?text=Нет+обложки';
+            const ebookBadge = book.is_ebook ? '<div class="ebook-badge">E-book</div>' : '';
+
+            grid.innerHTML += `
+                <div class="${cardClass}">
+                    ${ebookBadge}
+                    <img src="${cover}" alt="Обложка" class="book-cover">
+                    <div class="book-title">${book.title}</div>
+                    <div class="book-info">Жанр: ${book.genre}</div>
+                    <div class="book-info">Рейтинг: ⭐ ${book.rating}</div>
+                    <div class="book-info">Дата изд.: ${book.publish_date}</div>
+                    <div class="book-price">${book.cost} ₽</div>
+                    <div class="book-info">В наличии: ${book.quantity} шт.</div>
+                </div>
+            `;
+        });
+    }
+
+    // Запуск
+    loadBooks();
+</script>
+
+</body>
+</html>
